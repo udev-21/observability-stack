@@ -1,0 +1,289 @@
+# Vector pipeline: nginx json_analytics (extended) -> VictoriaLogs (logs) + VictoriaMetrics (metrics).
+#
+#   nginx access.log  (read by TWO independent file sources)
+#     ├─ source "nginx"          read_from: beginning ─► enrich ─────────► VictoriaLogs (raw logs)
+#     └─ source "nginx_metrics"  read_from: end        ─► enrich_metrics ─┬─► metric_prep ─► to_metrics ─┐
+#                                                                         └─► upstream_filter ─► … ──────┴─► cap ─► VictoriaMetrics
+#
+# Two readers of the SAME file so a pre-existing log BACKFILLS logs (beginning) but does NOT
+# replay into metrics (end) — avoids a one-time startup counter spike. Separate checkpoints.
+#
+# Cardinality discipline (see metrics_plan_extended.txt):
+#   - only BOUNDED fields are labels; high-card fields (uri/ip/ua) stay in logs.
+#   - histograms carry MINIMAL labels (no normalized_url) — buckets multiply series.
+#   - tag_cardinality_limit caps each tag key; keep label counts small per metric.
+data_dir: /var/lib/vector
+
+sources:
+  # Logs reader — reads from the beginning (default), so a pre-existing file backfills
+  # into VictoriaLogs. Resumes from its checkpoint on restart (no re-read).
+  nginx:
+    type: file
+    include:
+      - /var/log/nginx/access.log
+    fingerprint:
+      strategy: device_and_inode
+
+  # Metrics reader — same file, but starts at the END so historical lines are NOT
+  # replayed into the metrics (no startup counter spike). Independent checkpoint.
+  nginx_metrics:
+    type: file
+    include:
+      - /var/log/nginx/access.log
+    read_from: end
+    fingerprint:
+      strategy: device_and_inode
+
+transforms:
+  # ── Enrichment for the LOGS path (source: nginx, read_from beginning) ────────
+  enrich:
+    type: remap
+    inputs: [nginx]
+    source: |
+      . = parse_json!(.message)
+      .app = "nginx"
+
+      # status class, e.g. "2xx"
+      status_str = string(.status) ?? "0"
+      .status_class = slice!(status_str, 0, 1) + "xx"
+
+      # normalized_url is precomputed at nginx level (via a map on the request path; see
+      # docs/nginx-logging.conf.example) and logged as a bounded field.
+      # Default to "empty" if the field is absent (map not configured) or blank.
+      .normalized_url = string(.normalized_url) ?? "empty"
+      if .normalized_url == "" { .normalized_url = "empty" }
+
+  # ── Same enrichment for the METRICS path (source: nginx_metrics, read_from end) ─
+  enrich_metrics:
+    type: remap
+    inputs: [nginx_metrics]
+    source: |
+      . = parse_json!(.message)
+      .app = "nginx"
+      status_str = string(.status) ?? "0"
+      .status_class = slice!(status_str, 0, 1) + "xx"
+      .normalized_url = string(.normalized_url) ?? "empty"
+      if .normalized_url == "" { .normalized_url = "empty" }
+
+  # ── Coerce numerics + normalize bounded labels (metrics path) ───────────────
+  metric_prep:
+    type: remap
+    inputs: [enrich_metrics]
+    source: |
+      # numeric coercions
+      .request_time_f   = to_float(.request_time) ?? 0.0
+      .bytes_sent_i     = to_int(.bytes_sent) ?? 0
+      .request_length_i = to_int(.request_length) ?? 0
+      .client_rtt_s     = (to_float(.tcpinfo_rtt) ?? 0.0) / 1000000.0   # microseconds -> seconds
+
+      # bounded label defaults (empty/absent -> "none")
+      .cache = string(.upstream_cache_status) ?? "none"
+      if .cache == "" { .cache = "none" }
+      .tlsver = string(.ssl_protocol) ?? "none"
+      if .tlsver == "" { .tlsver = "none" }
+      .tlsres = string(.ssl_session_reused) ?? "none"
+      if .tlsres == "" { .tlsres = "none" }
+      .h2 = string(.http2) ?? "none"
+      if .h2 == "" { .h2 = "none" }
+      .lreq = string(.limit_req_status) ?? "none"
+      if .lreq == "" { .lreq = "none" }
+      .lconn = string(.limit_conn_status) ?? "none"
+      if .lconn == "" { .lconn = "none" }
+      .country = string(.geoip_country_code) ?? "none"
+      if .country == "" { .country = "none" }
+
+      # normalized content type: strip params, lowercase, default "none"
+      ct = downcase(string(.sent_http_content_type) ?? "")
+      ct = string(split(ct, ";")[0]) ?? ""
+      if ct == "" { ct = "none" }
+      .content_type = ct
+
+      # delivery completion flag
+      .completion = if .request_completion == "OK" { "ok" } else { "incomplete" }
+
+  # ── General metrics (every request) ─────────────────────────────────────────
+  to_metrics:
+    type: log_to_metric
+    inputs: [metric_prep]
+    metrics:
+      # traffic / errors (RED rate + errors)
+      - type: counter
+        field: status
+        name: nginx_http_requests_total
+        tags: { host: "{{http_host}}", method: "{{request_method}}", status: "{{status}}", status_class: "{{status_class}}", normalized_url: "{{normalized_url}}" }
+      # egress + ingress bytes
+      - type: counter
+        field: bytes_sent_i
+        name: nginx_http_bytes_sent_total
+        increment_by_value: true
+        tags: { host: "{{http_host}}", status_class: "{{status_class}}", normalized_url: "{{normalized_url}}" }
+      - type: counter
+        field: request_length_i
+        name: nginx_http_request_bytes_total
+        increment_by_value: true
+        tags: { host: "{{http_host}}", method: "{{request_method}}" }
+      # cache
+      - type: counter
+        field: status
+        name: nginx_cache_total
+        tags: { host: "{{http_host}}", cache_status: "{{cache}}" }
+      # tls posture
+      - type: counter
+        field: status
+        name: nginx_tls_requests_total
+        tags: { host: "{{http_host}}", ssl_protocol: "{{tlsver}}", ssl_session_reused: "{{tlsres}}" }
+      # protocol mix
+      - type: counter
+        field: status
+        name: nginx_protocol_requests_total
+        tags: { host: "{{http_host}}", scheme: "{{scheme}}", server_protocol: "{{server_protocol}}", http2: "{{h2}}" }
+      # geography
+      - type: counter
+        field: status
+        name: nginx_requests_by_country_total
+        tags: { country: "{{country}}", status_class: "{{status_class}}" }
+      # content type
+      - type: counter
+        field: status
+        name: nginx_content_type_requests_total
+        tags: { content_type: "{{content_type}}", status_class: "{{status_class}}" }
+      - type: counter
+        field: bytes_sent_i
+        name: nginx_content_type_bytes_total
+        increment_by_value: true
+        tags: { content_type: "{{content_type}}" }
+      # delivery reliability
+      - type: counter
+        field: status
+        name: nginx_response_completion_total
+        tags: { host: "{{http_host}}", completion: "{{completion}}", status_class: "{{status_class}}" }
+      # rate / connection limiting
+      - type: counter
+        field: status
+        name: nginx_ratelimit_total
+        tags: { host: "{{http_host}}", result: "{{lreq}}" }
+      - type: counter
+        field: status
+        name: nginx_connlimit_total
+        tags: { host: "{{http_host}}", result: "{{lconn}}" }
+      # latency (normalized_url intentionally omitted from histograms)
+      - type: histogram
+        field: request_time_f
+        name: nginx_request_duration_seconds
+        tags: { host: "{{http_host}}", method: "{{request_method}}", status_class: "{{status_class}}" }
+      # client network RTT
+      - type: histogram
+        field: client_rtt_s
+        name: nginx_client_rtt_seconds
+        tags: { country: "{{country}}" }
+
+  # ── Upstream branch: only requests that actually hit a backend ──────────────
+  upstream_filter:
+    type: filter
+    inputs: [enrich_metrics]
+    condition:
+      type: vrl
+      source: |
+        u = string(.upstream) ?? "-"
+        u != "-" && u != ""
+
+  upstream_prep:
+    type: remap
+    inputs: [upstream_filter]
+    source: |
+      # upstream_* may be multi-valued on retries ("a, b") or redirects ("a : b"); take the final peer/value
+      ua = string(.upstream) ?? "-"
+      .ua = replace(ua, r'^.*[,:]\s+', "")
+
+      ust = string(.upstream_status) ?? "-"
+      ust = replace(ust, r'^.*[,:]\s+', "")
+      if ust == "" { ust = "-" }
+      .ust = ust
+
+      urt = string(.upstream_response_time) ?? "0"
+      .urt = to_float(replace(urt, r'^.*[,:]\s+', "")) ?? 0.0
+      uct = string(.upstream_connect_time) ?? "0"
+      .uct = to_float(replace(uct, r'^.*[,:]\s+', "")) ?? 0.0
+      uht = string(.upstream_header_time) ?? "0"
+      .uht = to_float(replace(uht, r'^.*[,:]\s+', "")) ?? 0.0
+      uqt = string(.upstream_queue_time) ?? "0"
+      .uqt = to_float(replace(uqt, r'^.*[,:]\s+', "")) ?? 0.0
+
+      .ubr = to_int(string(.upstream_bytes_received) ?? "0") ?? 0
+      .ubs = to_int(string(.upstream_bytes_sent) ?? "0") ?? 0
+
+  upstream_metrics:
+    type: log_to_metric
+    inputs: [upstream_prep]
+    metrics:
+      - type: counter
+        field: status
+        name: nginx_upstream_responses_total
+        tags: { host: "{{http_host}}", upstream: "{{ua}}", upstream_status: "{{ust}}" }
+      - type: counter
+        field: ubr
+        name: nginx_upstream_bytes_received_total
+        increment_by_value: true
+        tags: { host: "{{http_host}}", upstream: "{{ua}}" }
+      - type: counter
+        field: ubs
+        name: nginx_upstream_bytes_sent_total
+        increment_by_value: true
+        tags: { host: "{{http_host}}", upstream: "{{ua}}" }
+      - type: histogram
+        field: urt
+        name: nginx_upstream_response_seconds
+        tags: { host: "{{http_host}}", upstream: "{{ua}}" }
+      - type: histogram
+        field: uct
+        name: nginx_upstream_connect_seconds
+        tags: { host: "{{http_host}}" }
+      - type: histogram
+        field: uht
+        name: nginx_upstream_header_seconds
+        tags: { host: "{{http_host}}" }
+      - type: histogram
+        field: uqt
+        name: nginx_upstream_queue_seconds
+        tags: { host: "{{http_host}}" }
+
+  # ── Cardinality firewall over ALL metric streams ────────────────────────────
+  cap:
+    type: tag_cardinality_limit
+    inputs: [to_metrics, upstream_metrics]
+    mode: exact
+    value_limit: 500
+    limit_exceeded_action: drop_tag
+
+sinks:
+  # ── Logs -> VictoriaLogs ─────────────────────────────────────────────────────
+  victorialogs:
+    type: elasticsearch
+    inputs: [enrich]
+    endpoints:
+      - http://victorialogs:9428/insert/elasticsearch/
+    api_version: v8
+    mode: bulk
+    compression: gzip
+    healthcheck:
+      enabled: false
+    query:
+      _msg_field: request
+      _time_field: time_iso8601
+      _stream_fields: server_name,app
+    buffer:
+      type: disk
+      max_size: 268435488
+
+  # ── Metrics -> VictoriaMetrics ───────────────────────────────────────────────
+  victoriametrics:
+    type: prometheus_remote_write
+    inputs: [cap]
+    endpoint: http://victoriametrics:8428/api/v1/write
+    healthcheck:
+      enabled: false
+    # Shared buckets for ALL seconds-based histograms (request/upstream/rtt).
+    buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+    buffer:
+      type: disk
+      max_size: 268435488

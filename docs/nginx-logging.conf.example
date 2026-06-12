@@ -1,0 +1,113 @@
+# =============================================================================
+#  nginx access logging for the observability stack
+# -----------------------------------------------------------------------------
+#  Put the `map` and `log_format` blocks in the http {} context
+#  (e.g. /etc/nginx/conf.d/logging.conf, which is included inside http {}).
+#  Put `access_log` in http {}, a server {}, or a location {}.
+#  Requires ngx_http_map_module (compiled in by default).
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# 1) Normalize the request path into a BOUNDED `normalized_url` label.
+#
+#    Source is $uri (URL-decoded, query string already stripped). nginx tests
+#    the regex entries TOP-TO-BOTTOM and the FIRST match wins, so list the more
+#    specific routes before the more general ones. `default` is the hard
+#    catch-all: anything you didn't enumerate collapses to "other", which keeps
+#    metric cardinality bounded by (number of map entries + 1) no matter what
+#    clients (or scanners) request.
+#
+#    Edit this list to match YOUR application's real routes.
+# -----------------------------------------------------------------------------
+map $uri $normalized_url {
+    default                         "other";
+
+    ~^/$                            "/";
+    ~^/health$                      "/health";
+    ~^/metrics$                     "/metrics";
+
+    # most specific first
+    ~^/api/users/\d+/orders         "/api/users/:id/orders";
+    ~^/api/users/\d+                "/api/users/:id";
+    ~^/api/orders/[0-9a-fA-F-]{36}  "/api/orders/:uuid";
+    ~^/api/                         "/api/*";
+
+    ~^/blog/[^/]+                   "/blog/:slug";
+    ~^/static/                      "/static/*";
+    ~^/assets/                      "/assets/*";
+}
+# If you add many entries you may need: map_hash_bucket_size 128;
+# Alternative source: use $request_uri instead of $uri to classify the
+# ORIGINALLY-requested path (before internal rewrites), but then your regexes
+# must tolerate a trailing "?...query".
+
+
+# -----------------------------------------------------------------------------
+# 2) Extended JSON access log format.
+#    Note the "normalized_url" field — Vector logs every field to VictoriaLogs
+#    and uses "normalized_url" directly as a bounded metric label (no Vector-side regex).
+# -----------------------------------------------------------------------------
+log_format json_analytics escape=json '{'
+    '"msec": "$msec", '
+    '"connection": "$connection", '
+    '"connection_requests": "$connection_requests", '
+    '"pid": "$pid", '
+    '"request_id": "$request_id", '
+    '"request_length": "$request_length", '
+    '"remote_addr": "$remote_addr", '
+    '"remote_user": "$remote_user", '
+    '"remote_port": "$remote_port", '
+    '"tcpinfo_rtt": "$tcpinfo_rtt", '
+    '"time_local": "$time_local", '
+    '"time_iso8601": "$time_iso8601", '
+    '"request": "$request", '
+    '"request_uri": "$request_uri", '
+    '"normalized_url": "$normalized_url", '                     # normalized, bounded path (from map above)
+    '"args": "$args", '
+    '"request_method": "$request_method", '
+    '"scheme": "$scheme", '
+    '"server_protocol": "$server_protocol", '
+    '"http2": "$http2", '
+    '"status": "$status", '
+    '"request_completion": "$request_completion", '
+    '"request_time": "$request_time", '
+    '"body_bytes_sent": "$body_bytes_sent", '
+    '"bytes_sent": "$bytes_sent", '
+    '"sent_http_content_type": "$sent_http_content_type", '
+    '"gzip_ratio": "$gzip_ratio", '
+    '"http_referer": "$http_referer", '
+    '"http_user_agent": "$http_user_agent", '
+    '"http_x_forwarded_for": "$http_x_forwarded_for", '
+    '"http_host": "$http_host", '
+    '"server_name": "$server_name", '
+    '"http_cf_ray": "$http_cf_ray", '
+    '"geoip_country_code": "$geoip_country_code", '
+    '"pipe": "$pipe", '
+    '"upstream": "$upstream_addr", '
+    '"upstream_status": "$upstream_status", '
+    '"upstream_connect_time": "$upstream_connect_time", '
+    '"upstream_header_time": "$upstream_header_time", '
+    '"upstream_response_time": "$upstream_response_time", '
+    '"upstream_queue_time": "$upstream_queue_time", '
+    '"upstream_response_length": "$upstream_response_length", '
+    '"upstream_bytes_received": "$upstream_bytes_received", '
+    '"upstream_bytes_sent": "$upstream_bytes_sent", '
+    '"upstream_cache_status": "$upstream_cache_status", '
+    '"ssl_protocol": "$ssl_protocol", '
+    '"ssl_cipher": "$ssl_cipher", '
+    '"ssl_session_reused": "$ssl_session_reused", '
+    '"ssl_server_name": "$ssl_server_name", '
+    '"limit_req_status": "$limit_req_status", '
+    '"limit_conn_status": "$limit_conn_status"'
+'}';
+
+
+# -----------------------------------------------------------------------------
+# 3) Emit the log (buffered to collapse per-request write() syscalls).
+# -----------------------------------------------------------------------------
+access_log /var/log/nginx/access.log json_analytics buffer=64k flush=5s;
+
+# After editing: `nginx -t` then reload. If nginx reports "unknown variable",
+# that variable's module isn't in your build — remove that line (e.g. $http2
+# needs ngx_http_v2_module; $http3 is omitted here because it requires a QUIC build).

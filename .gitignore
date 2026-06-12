@@ -1,0 +1,9 @@
+# Observability Stack – local overrides
+.env
+
+# Editor / OS artifacts
+.DS_Store
+*.swp
+*.swo
+Thumbs.db
+logs/

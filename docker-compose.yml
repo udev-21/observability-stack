@@ -1,0 +1,256 @@
+services:
+
+  # ── PostgreSQL – Grafana metadata store ──────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-grafana}
+      POSTGRES_USER: ${POSTGRES_USER:-grafana}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - observability-stack-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-grafana} -d ${POSTGRES_DB:-grafana}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+        reservations:
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+
+  # ── Grafana ───────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana-oss:13.0.2
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      victorialogs:
+        condition: service_started
+      victoriametrics:
+        condition: service_started
+    ports:
+      - "3000:3000"
+    user: "472:472"
+    environment:
+      # ── Server ─────────────────────────────────────────────────────────────
+      GF_SERVER_DOMAIN: ${GF_DOMAIN:-localhost}
+      GF_SERVER_ROOT_URL: ${GF_ROOT_URL:-http://localhost:3000/}
+      GF_SERVER_ENABLE_GZIP: "true"
+
+      # ── Database ────────────────────────────────────────────────────────────
+      GF_DATABASE_TYPE: postgres
+      GF_DATABASE_HOST: postgres:5432
+      GF_DATABASE_NAME: ${POSTGRES_DB:-grafana}
+      GF_DATABASE_USER: ${POSTGRES_USER:-grafana}
+      GF_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      GF_DATABASE_SSL_MODE: disable
+
+      # ── Security ────────────────────────────────────────────────────────────
+      GF_SECURITY_ADMIN_USER: ${GF_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:?GF_ADMIN_PASSWORD must be set}
+      GF_SECURITY_ADMIN_EMAIL: ${GF_ADMIN_EMAIL:-admin@localhost}
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_COOKIE_SAMESITE: lax
+      GF_SECURITY_STRICT_TRANSPORT_SECURITY: "true"
+      GF_SECURITY_STRICT_TRANSPORT_SECURITY_MAX_AGE_SECONDS: "86400"
+      GF_SECURITY_X_CONTENT_TYPE_OPTIONS: "true"
+      GF_SECURITY_X_XSS_PROTECTION: "true"
+      GF_SECURITY_CONTENT_SECURITY_POLICY: "true"
+
+      # ── Users ───────────────────────────────────────────────────────────────
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+      GF_USERS_AUTO_ASSIGN_ORG: "true"
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: Viewer
+
+      # ── Auth ────────────────────────────────────────────────────────────────
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_AUTH_LOGIN_MAXIMUM_INACTIVE_LIFETIME_DURATION: 7d
+      GF_AUTH_LOGIN_MAXIMUM_LIFETIME_DURATION: 30d
+      GF_AUTH_TOKEN_ROTATION_INTERVAL_MINUTES: "720"
+
+      # ── SMTP ────────────────────────────────────────────────────────────────
+      GF_SMTP_ENABLED: ${GF_SMTP_ENABLED:-false}
+      GF_SMTP_HOST: ${GF_SMTP_HOST:-localhost:25}
+      GF_SMTP_USER: ${GF_SMTP_USER:-}
+      GF_SMTP_PASSWORD: ${GF_SMTP_PASSWORD:-}
+      GF_SMTP_FROM_ADDRESS: ${GF_SMTP_FROM_ADDRESS:-grafana@localhost}
+      GF_SMTP_FROM_NAME: ${GF_SMTP_FROM_NAME:-Grafana}
+
+      # ── Logging ─────────────────────────────────────────────────────────────
+      GF_LOG_MODE: console
+      GF_LOG_LEVEL: warn
+
+      # ── Analytics / telemetry ───────────────────────────────────────────────
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+
+      # ── Alerting ────────────────────────────────────────────────────────────
+      GF_ALERTING_ENABLED: "false"
+      GF_UNIFIED_ALERTING_ENABLED: "true"
+
+      # ── Feature toggles ─────────────────────────────────────────────────────
+      GF_FEATURE_TOGGLES_ENABLE: "publicDashboards"
+
+      # ── Plugins ─────────────────────────────────────────────────────────────
+      # VictoriaLogs datasource; installed at startup into the writable grafana_data volume.
+      GF_INSTALL_PLUGINS: "victoriametrics-logs-datasource"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - observability-stack-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+        reservations:
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/lib/grafana/png           # for rendering temporary PNGs
+      - /var/lib/grafana/csv           # for export temporary CSVs
+
+  # ── VictoriaLogs – log database ───────────────────────────────────────────────
+  victorialogs:
+    image: victoriametrics/victoria-logs:v1.50.0
+    restart: unless-stopped
+    command:
+      - -storageDataPath=/victoria-logs-data
+      - -retentionPeriod=${VL_RETENTION:-30d}
+      - -httpListenAddr=:9428
+    ports:
+      - "9428:9428"   # VictoriaLogs HTTP API + built-in UI (/select/vmui). Drop this line to keep it internal-only.
+    volumes:
+      - victorialogs_data:/victoria-logs-data
+    networks:
+      - observability-stack-network
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+        reservations:
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    # NOTE: distroless image (no shell) -> no CMD-SHELL healthcheck.
+
+  # ── VictoriaMetrics – metrics database ────────────────────────────────────────
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.145.0
+    restart: unless-stopped
+    command:
+      - -storageDataPath=/victoria-metrics-data
+      - -retentionPeriod=${VM_RETENTION:-12}   # bare number = months; also accepts 30d, 1y, etc.
+      - -httpListenAddr=:8428
+    ports:
+      - "8428:8428"   # VictoriaMetrics HTTP API (remote_write target) + UI (/vmui). Drop to keep internal-only.
+    volumes:
+      - victoriametrics_data:/victoria-metrics-data
+    networks:
+      - observability-stack-network
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+        reservations:
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    # NOTE: distroless image (no shell) -> no CMD-SHELL healthcheck.
+
+  # ── vector-init – one-shot: make the data volume writable by the non-root vector uid ─
+  # Named volumes are created root-owned; this chowns it once so Vector can run unprivileged.
+  vector-init:
+    image: busybox:1.37
+    user: "0:0"
+    command: ["chown", "-R", "${VECTOR_UID:-10000}:${VECTOR_UID:-10000}", "/var/lib/vector"]
+    volumes:
+      - vector_data:/var/lib/vector
+    networks:
+      - observability-stack-network
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+
+  # ── Vector – tails nginx logs, ships logs to VictoriaLogs AND derives metrics ─
+  vector:
+    image: timberio/vector:0.56.0-distroless-libc
+    restart: unless-stopped
+    depends_on:
+      vector-init:
+        condition: service_completed_successfully
+      victorialogs:
+        condition: service_started
+      victoriametrics:
+        condition: service_started
+    command: ["--config", "/etc/vector/vector.yaml"]
+    # Runs unprivileged. VECTOR_UID owns the data_dir (via vector-init); group_add lets it
+    # read root-owned nginx logs — set NGINX_LOG_GID to the group owning them (adm=4 on Debian/Ubuntu).
+    user: "${VECTOR_UID:-10000}:${VECTOR_UID:-10000}"
+    group_add:
+      - "${NGINX_LOG_GID:-4}"
+    environment:
+      VECTOR_DATA_DIR: /var/lib/vector
+    volumes:
+      # Pipeline definition (read-only).
+      - ./vector/vector.yaml:/etc/vector/vector.yaml:ro
+      # Host nginx log directory, read-only. Override host path via NGINX_LOG_DIR in .env.
+      - ${NGINX_LOG_DIR:-/var/log/nginx}:/var/log/nginx:ro
+      # Checkpoints + on-disk sink buffers (survive restarts / brief backend outages).
+      - vector_data:/var/lib/vector
+    networks:
+      - observability-stack-network
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 384M
+        reservations:
+          memory: 96M
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  postgres_data:
+    driver: local
+  grafana_data:
+    driver: local
+  victorialogs_data:
+    driver: local
+  victoriametrics_data:
+    driver: local
+  vector_data:
+    driver: local
+
+networks:
+  observability-stack-network:
+    driver: bridge
+    internal: false       # set to true if Grafana is behind a reverse proxy on the same host

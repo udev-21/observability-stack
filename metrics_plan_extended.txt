@@ -1,0 +1,272 @@
+================================================================================
+ NGINX json_analytics (EXTENDED) — FULL METRICS CATALOG
+================================================================================
+
+CONTEXT
+-------
+Catalog of every metric derivable from the EXTENDED nginx json_analytics log
+(original fields + the additions: tcpinfo_rtt, http2, request_completion,
+sent_http_content_type, upstream_status, upstream_queue_time,
+upstream_bytes_received, upstream_bytes_sent, ssl_session_reused,
+ssl_server_name, limit_req_status, limit_conn_status).
+
+Pipeline reality (Shape A): nginx access.log -> Vector -> { VictoriaLogs (raw
+logs) + VictoriaMetrics (derived metrics) } -> Grafana. So each row is realizable
+two ways: as a Vector log_to_metric series (bounded fields only) OR as an
+on-demand LogsQL/PromQL query.
+
+KINDS
+  Counter      monotonic count (-> rate/sec)
+  Distribution numeric spread -> histogram buckets (avg, p50/p90/p95/p99, max)
+  Ratio        QUERY-TIME division of two counters (NOT a stored series)
+  Unique       distinct-value cardinality -> LOGS ONLY (LogsQL uniq/count_uniq;
+               a stateless log_to_metric cannot produce true distinct-over-time)
+  Derived      QUERY-TIME expression over other metrics (NOT a stored series)
+
+(!)   = high label cardinality -> normalize / top-N / keep in logs, never a raw label.
+(NEW) = unlocked by a field added in the extended log_format.
+
+
+--------------------------------------------------------------------------------
+A. TRAFFIC & THROUGHPUT
+--------------------------------------------------------------------------------
+Metric                        | Source field(s)          | Kind     | Notes
+------------------------------+--------------------------+----------+--------------------------
+Total requests / req-rate     | (log line)               | Counter  | base RED "rate"
+Requests by status code       | status                   | Counter  | 200, 301, 404...
+Requests by status class      | status                   | Counter  | 2xx/3xx/4xx/5xx
+Requests by method            | request_method           | Counter  | GET/POST/...
+Requests by virtual host      | http_host, server_name   | Counter  | per-site traffic
+Requests by scheme            | scheme                   | Counter  | http vs https
+Requests by HTTP version      | server_protocol          | Counter  | 1.0/1.1/2.0/3.0
+HTTP/2 adoption               | http2                    | Counter  | (NEW) "h2"/"h2c"/none; h2c is rare/notable
+Requests by content type      | sent_http_content_type   | Counter  | (NEW) (!) normalize to base type (text/html, application/json, image/*)
+Requests by URI / path        | request_uri, request     | Counter  | (!) normalize /u/123 -> /u/:id
+Requests with query args      | args                     | Ratio    | with vs without query string
+Requests by auth user         | remote_user              | Counter  | (!) medium card
+Pipelined requests            | pipe                     | Counter  | "p" vs "."
+
+
+--------------------------------------------------------------------------------
+B. ERRORS & RELIABILITY
+--------------------------------------------------------------------------------
+Metric                        | Source field(s)          | Kind     | Notes
+------------------------------+--------------------------+----------+--------------------------
+4xx total / rate              | status                   | Counter  | client errors
+5xx total / rate              | status                   | Counter  | server errors
+Error ratio (5xx / total)     | status                   | Ratio    | core RED "errors" / SLO
+Client-error ratio (4xx/tot)  | status                   | Ratio    |
+404 Not Found                 | status                   | Counter  | broken links / scanning
+499 client-aborted            | status                   | Counter  | client closed before response
+502 / 503 / 504               | status                   | Counter  | gateway / backend down
+401 / 403 auth failures       | status                   | Counter  | brute-force / abuse
+Incomplete responses          | request_completion       | Counter  | (NEW) empty = not fully sent (drop/abort) - complements 499
+Incomplete-response ratio     | request_completion       | Ratio    | (NEW) delivery reliability signal
+Zero-body responses           | body_bytes_sent = 0      | Counter  | empty payloads; by status
+Apdex score                   | request_time             | Derived  | bucket-constrained (needs T and 4T as bucket edges)
+
+
+--------------------------------------------------------------------------------
+C. LATENCY & TIMING   (Distributions -> histogram: avg, p50/p90/p95/p99, max)
+--------------------------------------------------------------------------------
+Metric                        | Source field(s)                       | Kind         | Notes
+------------------------------+---------------------------------------+--------------+----------------
+Total request time            | request_time                          | Distribution | end-to-end latency
+Upstream response time        | upstream_response_time                | Distribution | backend processing
+Upstream connect time         | upstream_connect_time                 | Distribution | TCP+TLS to backend
+Upstream header time (TTFB)   | upstream_header_time                  | Distribution | first backend byte
+Upstream queue time           | upstream_queue_time                   | Distribution | (NEW) wait for a free peer = pool saturation
+Proxy / network overhead      | request_time - upstream_response_time | Derived      | nginx-side cost
+Client network RTT            | tcpinfo_rtt                           | Distribution | (NEW) client link quality (microseconds)
+High-RTT (slow client) share  | tcpinfo_rtt > threshold               | Ratio        | (NEW) distant/poor-network clients
+Slow-request count            | request_time > threshold              | Counter      | = a bucket-edge count
+
+
+--------------------------------------------------------------------------------
+D. BANDWIDTH & PAYLOAD SIZE
+--------------------------------------------------------------------------------
+Metric                        | Source field(s)            | Kind         | Notes
+------------------------------+----------------------------+--------------+--------------------
+Egress bytes (bandwidth)      | bytes_sent                 | Counter      | total out
+Response body bytes           | body_bytes_sent            | Counter      | excludes headers
+Ingress bytes (request size)  | request_length             | Counter      | uploads, header bloat
+Upstream response bytes       | upstream_response_length   | Counter      | backend payload (logged size)
+Upstream bytes received       | upstream_bytes_received    | Counter      | (NEW) actual bytes read from origin
+Upstream bytes sent           | upstream_bytes_sent        | Counter      | (NEW) bytes forwarded to origin
+Response size distribution    | bytes_sent                 | Distribution | avg/p95 payload
+Request size distribution     | request_length             | Distribution |
+Header overhead               | bytes_sent - body_bytes_sent | Derived    | header weight
+Compression ratio             | gzip_ratio                 | Distribution | gzip effectiveness
+Compressed-response share     | gzip_ratio > 1             | Ratio        | % actually gzipped
+Bandwidth by content type     | bytes_sent x content_type  | Counter      | (NEW) what's eating egress (normalize type)
+
+
+--------------------------------------------------------------------------------
+E. CACHE EFFECTIVENESS
+--------------------------------------------------------------------------------
+Metric                        | Source field(s)                | Kind     | Notes
+------------------------------+--------------------------------+----------+----------------------
+Cache status counts           | upstream_cache_status          | Counter  | HIT/MISS/BYPASS/EXPIRED/STALE/REVALIDATED/UPDATING/-
+Cache hit ratio               | upstream_cache_status          | Ratio    | HIT / (HIT+MISS)
+Bytes from cache vs origin    | body_bytes_sent x cache_status | Counter  | offload savings
+Uncacheable (BYPASS) share    | upstream_cache_status          | Ratio    | tuning signal
+
+
+--------------------------------------------------------------------------------
+F. UPSTREAM / BACKEND HEALTH
+--------------------------------------------------------------------------------
+Metric                        | Source field(s)          | Kind     | Notes
+------------------------------+--------------------------+----------+--------------------------
+Requests by upstream server   | upstream                 | Counter  | bounded by backend count
+Requests by upstream status   | upstream_status          | Counter  | (NEW) status FROM origin (vs nginx-generated status)
+Upstream 5xx rate             | upstream_status          | Counter  | (NEW) true backend errors
+nginx-vs-upstream mismatch    | status, upstream_status  | Derived  | (NEW) e.g. upstream 200 but client 499/500
+Locally-served (no upstream)  | upstream = "-"           | Counter  | static / cache hits
+Per-upstream error rate       | upstream + upstream_status | Ratio  | spot a bad backend
+Upstream retries              | upstream (multiple addrs)| Counter  | comma/colon list = retried
+Per-upstream traffic share    | upstream                 | Counter  | load-balance fairness
+Backend saturation            | upstream_queue_time > 0  | Ratio    | (NEW) share of requests queued for a peer
+
+
+--------------------------------------------------------------------------------
+G. TLS & SECURITY POSTURE
+--------------------------------------------------------------------------------
+Metric                        | Source field(s)              | Kind     | Notes
+------------------------------+------------------------------+----------+----------------------
+Requests by TLS protocol      | ssl_protocol                 | Counter  | TLSv1.2 / 1.3 mix
+Legacy/insecure TLS           | ssl_protocol in {TLSv1,1.1}  | Counter  | deprecation tracking
+Requests by cipher            | ssl_cipher                   | Counter  | (!) medium card
+TLS session resumption ratio  | ssl_session_reused           | Ratio    | (NEW) "r" share = handshake CPU saved
+Full-handshake count          | ssl_session_reused = "."     | Counter  | (NEW) handshake cost driver
+Requests by SNI host          | ssl_server_name              | Counter  | (NEW) per-domain at TLS layer (bounded)
+SNI vs Host mismatch          | ssl_server_name, http_host   | Derived  | (NEW) misrouting / abuse signal
+Missing-SNI requests          | ssl_server_name empty        | Counter  | (NEW) legacy clients
+Plaintext HTTP                | scheme = http                | Counter  | should be redirected
+Behind Cloudflare             | http_cf_ray present          | Counter  | CDN coverage
+Forwarded / proxied           | http_x_forwarded_for present | Counter  | direct vs proxied
+Distinct forwarded client IPs | http_x_forwarded_for         | Unique   | (!) logs only
+
+
+--------------------------------------------------------------------------------
+H. GEOGRAPHY
+--------------------------------------------------------------------------------
+Metric                        | Source field(s)            | Kind     | Notes
+------------------------------+----------------------------+----------+----------------------
+Requests by country           | geoip_country_code         | Counter  | ~200 values, safe
+Unique countries              | geoip_country_code         | Unique   | logs only
+Bandwidth by country          | bytes_sent x country       | Counter  | egress cost by region
+Error rate by country         | status x country           | Ratio    | regional issues
+Client RTT by country         | tcpinfo_rtt x country      | Distribution | (NEW) regional latency / PoP placement
+
+
+--------------------------------------------------------------------------------
+I. CLIENTS & BOTS   (high-card -> LOGS ONLY unless normalized)
+--------------------------------------------------------------------------------
+Metric                        | Source field(s)          | Kind     | Notes
+------------------------------+--------------------------+----------+--------------------------
+Unique visitors               | remote_addr              | Unique   | (!) logs (count_uniq)
+Requests by client IP / top   | remote_addr              | Counter  | (!) top-N only; abuse detection
+Requests by user agent        | http_user_agent          | Counter  | (!) very high card; normalize
+Bot / crawler share           | http_user_agent (regex)  | Ratio    | bot vs human (normalized flag)
+Requests by referer / domain  | http_referer             | Counter  | (!) traffic sources
+Direct vs referred            | http_referer empty?      | Ratio    |
+
+
+--------------------------------------------------------------------------------
+J. CONNECTIONS & SERVER INTERNALS
+--------------------------------------------------------------------------------
+Metric                        | Source field(s)          | Kind         | Notes
+------------------------------+--------------------------+--------------+----------------
+Unique connections            | connection               | Unique       | logs only
+Requests per connection       | connection_requests      | Distribution | keepalive efficiency
+Keepalive reuse ratio         | connection_requests > 1  | Ratio        | conn reuse
+Active worker processes       | pid                      | Unique       | logs only
+Requests per worker           | pid                      | Counter      | (!) balance across workers
+
+
+--------------------------------------------------------------------------------
+L. RATE / CONNECTION LIMITING   (NEW category)
+--------------------------------------------------------------------------------
+Metric                        | Source field(s)          | Kind     | Notes
+------------------------------+--------------------------+----------+--------------------------
+Rate-limit outcomes           | limit_req_status         | Counter  | (NEW) PASSED/DELAYED/REJECTED (empty if unused)
+Rate-limit rejection ratio    | limit_req_status         | Ratio    | (NEW) abuse / capacity pressure
+Rate-limit delayed count      | limit_req_status=DELAYED | Counter  | (NEW) burst smoothing activity
+Conn-limit outcomes           | limit_conn_status        | Counter  | (NEW) PASSED/REJECTED
+Conn-limit rejection ratio    | limit_conn_status        | Ratio    | (NEW) concurrency ceiling hit
+
+
+--------------------------------------------------------------------------------
+K. NON-METRIC FIELDS
+--------------------------------------------------------------------------------
+request_id                    -> correlation key (metric anomaly -> exact log line).
+time_iso8601 / time_local / msec -> the timestamp; enables seasonality views,
+                                 not a metric. time_iso8601 = the _time source.
+remote_port                   -> ephemeral client port; skip.
+ssl_server_name               -> also a label (G); not useful as a free metric alone.
+
+
+================================================================================
+ CARDINALITY GUIDANCE (read before turning any row into a stored series)
+================================================================================
+1. BOUNDED label whitelist (safe to put on a metric):
+     status, status_class, request_method, scheme, server_protocol, http2,
+     http_host/server_name, ssl_protocol, ssl_session_reused, ssl_server_name,
+     upstream, upstream_cache_status, upstream_status, geoip_country_code,
+     limit_req_status, limit_conn_status, normalized content-type, normalized route.
+
+2. (!) fields (request_uri, remote_addr, http_user_agent, http_referer,
+   ssl_cipher, raw content-type, forwarded IPs) -> NORMALIZE or keep in logs.
+
+3. Histograms cost (buckets + 2) series PER label combination. Your latency
+   histogram (status_class x method x host x route x ~13 buckets) is already the
+   single biggest series driver. Every extra Distribution row multiplies again.
+   Prefer FEW labels on histograms; consider dropping `route` from histograms.
+
+4. tag_cardinality_limit caps each tag INDEPENDENTLY (value_limit per key) - it
+   does NOT bound the COMBINATORIAL PRODUCT status x method x host x route x ...
+   The product is the real OOM risk; keep the number of labels small.
+
+5. Ratio / Derived rows are PromQL at query time, not new series. Unique rows are
+   LogsQL over VictoriaLogs, not metrics. Don't try to "emit" them.
+
+
+================================================================================
+ SUGGESTED DASHBOARD ADDITIONS FROM THE NEW FIELDS (highest value first)
+================================================================================
+  1. Upstream status 5xx rate            (upstream_status)      -> true backend health
+  2. TLS session-resumption ratio         (ssl_session_reused)   -> handshake CPU
+  3. Rate-limit rejection rate            (limit_req_status)     -> abuse / capacity
+  4. Backend saturation (queue time p95)  (upstream_queue_time)  -> pool sizing
+  5. Incomplete-response ratio            (request_completion)   -> delivery reliability
+  6. Client RTT p50/p95 by country        (tcpinfo_rtt)          -> network/PoP
+  7. HTTP/2 adoption                      (http2)                -> protocol rollout
+  8. Bandwidth by content type            (sent_http_content_type)-> egress drivers
+
+
+================================================================================
+ IMPLEMENTATION STATUS (vector.yaml today)
+================================================================================
+Already emitted:
+  nginx_http_requests_total{status,status_class,method,host,route,cache_status}
+  nginx_http_bytes_sent_total{status_class,host,route}
+  nginx_request_duration_seconds (histogram){status_class,method,host,route}
+
+Bounded, NOT yet emitted (cheap to add as labels/metrics):
+  upstream_status, ssl_protocol, ssl_session_reused, ssl_server_name, http2,
+  limit_req_status, limit_conn_status, geoip_country_code, normalized content-type;
+  + histograms: upstream_response_time, upstream_queue_time, tcpinfo_rtt;
+  + counters: upstream_bytes_received/sent.
+
+Stay in logs (VictoriaLogs) only:
+  all (!) fields and all Unique-kind rows.
+
+
+================================================================================
+ VERIFICATION
+================================================================================
+- Coverage: every field in the EXTENDED log_format appears in >=1 row above
+  (or is listed as non-metric in K).
+- Validate any new series against a sample log batch in /vmui (VictoriaMetrics)
+  or /select/vmui (VictoriaLogs) before wiring a panel/alert.
+- Watch series growth in the VictoriaMetrics cardinality explorer after adding labels.
