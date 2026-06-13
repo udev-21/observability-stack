@@ -206,8 +206,6 @@ transforms:
       .uct = to_float(replace(uct, r'^.*[,:]\s+', "")) ?? 0.0
       uht = string(.upstream_header_time) ?? "0"
       .uht = to_float(replace(uht, r'^.*[,:]\s+', "")) ?? 0.0
-      uqt = string(.upstream_queue_time) ?? "0"
-      .uqt = to_float(replace(uqt, r'^.*[,:]\s+', "")) ?? 0.0
 
       .ubr = to_int(string(.upstream_bytes_received) ?? "0") ?? 0
       .ubs = to_int(string(.upstream_bytes_sent) ?? "0") ?? 0
@@ -241,10 +239,6 @@ transforms:
       - type: histogram
         field: uht
         name: nginx_upstream_header_seconds
-        tags: { host: "{{http_host}}" }
-      - type: histogram
-        field: uqt
-        name: nginx_upstream_queue_seconds
         tags: { host: "{{http_host}}" }
 
   # ── Cardinality firewall over ALL metric streams ────────────────────────────

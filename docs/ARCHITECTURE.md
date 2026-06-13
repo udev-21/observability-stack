@@ -174,7 +174,6 @@ Upstream (proxied requests only — `upstream_filter`):
 | `nginx_upstream_response_seconds` | histogram | host, upstream |
 | `nginx_upstream_connect_seconds` | histogram | host |
 | `nginx_upstream_header_seconds` | histogram | host |
-| `nginx_upstream_queue_seconds` | histogram | host |
 
 Histogram buckets (seconds, shared): `0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0`.
 

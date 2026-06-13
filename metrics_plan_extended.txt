@@ -6,7 +6,7 @@ CONTEXT
 -------
 Catalog of every metric derivable from the EXTENDED nginx json_analytics log
 (original fields + the additions: tcpinfo_rtt, http2, request_completion,
-sent_http_content_type, upstream_status, upstream_queue_time,
+sent_http_content_type, upstream_status,
 upstream_bytes_received, upstream_bytes_sent, ssl_session_reused,
 ssl_server_name, limit_req_status, limit_conn_status).
 
@@ -75,7 +75,6 @@ Total request time            | request_time                          | Distribu
 Upstream response time        | upstream_response_time                | Distribution | backend processing
 Upstream connect time         | upstream_connect_time                 | Distribution | TCP+TLS to backend
 Upstream header time (TTFB)   | upstream_header_time                  | Distribution | first backend byte
-Upstream queue time           | upstream_queue_time                   | Distribution | (NEW) wait for a free peer = pool saturation
 Proxy / network overhead      | request_time - upstream_response_time | Derived      | nginx-side cost
 Client network RTT            | tcpinfo_rtt                           | Distribution | (NEW) client link quality (microseconds)
 High-RTT (slow client) share  | tcpinfo_rtt > threshold               | Ratio        | (NEW) distant/poor-network clients
@@ -125,7 +124,6 @@ Locally-served (no upstream)  | upstream = "-"           | Counter  | static / c
 Per-upstream error rate       | upstream + upstream_status | Ratio  | spot a bad backend
 Upstream retries              | upstream (multiple addrs)| Counter  | comma/colon list = retried
 Per-upstream traffic share    | upstream                 | Counter  | load-balance fairness
-Backend saturation            | upstream_queue_time > 0  | Ratio    | (NEW) share of requests queued for a peer
 
 
 --------------------------------------------------------------------------------
@@ -237,11 +235,10 @@ ssl_server_name               -> also a label (G); not useful as a free metric a
   1. Upstream status 5xx rate            (upstream_status)      -> true backend health
   2. TLS session-resumption ratio         (ssl_session_reused)   -> handshake CPU
   3. Rate-limit rejection rate            (limit_req_status)     -> abuse / capacity
-  4. Backend saturation (queue time p95)  (upstream_queue_time)  -> pool sizing
-  5. Incomplete-response ratio            (request_completion)   -> delivery reliability
-  6. Client RTT p50/p95 by country        (tcpinfo_rtt)          -> network/PoP
-  7. HTTP/2 adoption                      (http2)                -> protocol rollout
-  8. Bandwidth by content type            (sent_http_content_type)-> egress drivers
+  4. Incomplete-response ratio            (request_completion)   -> delivery reliability
+  5. Client RTT p50/p95 by country        (tcpinfo_rtt)          -> network/PoP
+  6. HTTP/2 adoption                      (http2)                -> protocol rollout
+  7. Bandwidth by content type            (sent_http_content_type)-> egress drivers
 
 
 ================================================================================
@@ -255,7 +252,7 @@ Already emitted:
 Bounded, NOT yet emitted (cheap to add as labels/metrics):
   upstream_status, ssl_protocol, ssl_session_reused, ssl_server_name, http2,
   limit_req_status, limit_conn_status, geoip_country_code, normalized content-type;
-  + histograms: upstream_response_time, upstream_queue_time, tcpinfo_rtt;
+  + histograms: upstream_response_time, tcpinfo_rtt;
   + counters: upstream_bytes_received/sent.
 
 Stay in logs (VictoriaLogs) only:

@@ -966,7 +966,7 @@
     {
       "id": 15,
       "type": "timeseries",
-      "title": "Upstream timing p95 (connect / header / response / queue)",
+      "title": "Upstream timing p95 (connect / header / response)",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -1031,16 +1031,6 @@
           },
           "expr": "histogram_quantile(0.95, sum(rate(nginx_upstream_response_seconds_bucket{host=~\"$host\"}[$__rate_interval])) by (le))",
           "legendFormat": "response",
-          "range": true
-        },
-        {
-          "refId": "D",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "victoriametrics"
-          },
-          "expr": "histogram_quantile(0.95, sum(rate(nginx_upstream_queue_seconds_bucket{host=~\"$host\"}[$__rate_interval])) by (le))",
-          "legendFormat": "queue",
           "range": true
         }
       ]
