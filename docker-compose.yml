@@ -41,7 +41,7 @@ services:
       victoriametrics:
         condition: service_started
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"   # loopback only; front with a TLS reverse proxy in production
     user: "472:472"
     environment:
       # ── Server ─────────────────────────────────────────────────────────────
@@ -145,7 +145,7 @@ services:
       - -retentionPeriod=${VL_RETENTION:-30d}
       - -httpListenAddr=:9428
     ports:
-      - "9428:9428"   # VictoriaLogs HTTP API + built-in UI (/select/vmui). Drop this line to keep it internal-only.
+      - "127.0.0.1:9428:9428"   # loopback only — VictoriaLogs HTTP API + UI (/select/vmui). Remove to keep fully internal.
     volumes:
       - victorialogs_data:/victoria-logs-data
     networks:
@@ -170,7 +170,7 @@ services:
       - -retentionPeriod=${VM_RETENTION:-12}   # bare number = months; also accepts 30d, 1y, etc.
       - -httpListenAddr=:8428
     ports:
-      - "8428:8428"   # VictoriaMetrics HTTP API (remote_write target) + UI (/vmui). Drop to keep internal-only.
+      - "127.0.0.1:8428:8428"   # loopback only — VictoriaMetrics HTTP API (remote_write target) + UI (/vmui). Remove to keep fully internal.
     volumes:
       - victoriametrics_data:/victoria-metrics-data
     networks:
