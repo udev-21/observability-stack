@@ -1,12 +1,16 @@
 # Vector pipeline: nginx json_analytics (extended) -> VictoriaLogs (logs) + VictoriaMetrics (metrics).
 #
-#   nginx access.log  (read by TWO independent file sources)
-#     ├─ source "nginx"          read_from: beginning ─► enrich ─────────► VictoriaLogs (raw logs)
-#     └─ source "nginx_metrics"  read_from: end        ─► enrich_metrics ─┬─► metric_prep ─► to_metrics ─┐
-#                                                                         └─► upstream_filter ─► … ──────┴─► cap ─► VictoriaMetrics
+#   nginx access.log  (ONE file source, read_from: beginning)
+#     └─ source "nginx" ─┬─► enrich ─────────────► VictoriaLogs (raw logs)
+#                        └─► enrich_metrics ─┬─► metric_prep ─► to_metrics ─┐
+#                                            └─► upstream_filter ─► … ──────┴─► cap ─► VictoriaMetrics
 #
-# Two readers of the SAME file so a pre-existing log BACKFILLS logs (beginning) but does NOT
-# replay into metrics (end) — avoids a one-time startup counter spike. Separate checkpoints.
+# A SINGLE reader fans out to both paths. read_from defaults to beginning, so the source
+# re-attaches to each newly-created file after nightly logrotate (create+reopen -> new inode)
+# and keeps feeding metrics. A previous design used a second `read_from: end` reader to avoid a
+# one-time startup counter spike, but that reader did not re-follow the rotated inode and silently
+# stopped producing metrics after the first rotation. The one-time replay spike on a FRESH deploy
+# is a single rate() blip; permanent daily metric loss is not an acceptable trade.
 #
 # Cardinality discipline (see metrics_plan_extended.txt):
 #   - only BOUNDED fields are labels; high-card fields (uri/ip/ua) stay in logs.
@@ -15,22 +19,13 @@
 data_dir: /var/lib/vector
 
 sources:
-  # Logs reader — reads from the beginning (default), so a pre-existing file backfills
-  # into VictoriaLogs. Resumes from its checkpoint on restart (no re-read).
+  # Single reader — reads from the beginning (default) and resumes from its checkpoint on
+  # restart (no re-read). Survives nightly logrotate by re-attaching to the new inode.
+  # Fans out to both the logs and metrics enrichment transforms below.
   nginx:
     type: file
     include:
       - /var/log/nginx/access.log
-    fingerprint:
-      strategy: device_and_inode
-
-  # Metrics reader — same file, but starts at the END so historical lines are NOT
-  # replayed into the metrics (no startup counter spike). Independent checkpoint.
-  nginx_metrics:
-    type: file
-    include:
-      - /var/log/nginx/access.log
-    read_from: end
     fingerprint:
       strategy: device_and_inode
 
@@ -53,10 +48,10 @@ transforms:
       .normalized_url = string(.normalized_url) ?? "empty"
       if .normalized_url == "" { .normalized_url = "empty" }
 
-  # ── Same enrichment for the METRICS path (source: nginx_metrics, read_from end) ─
+  # ── Same enrichment for the METRICS path (fans out from the single nginx source) ─
   enrich_metrics:
     type: remap
-    inputs: [nginx_metrics]
+    inputs: [nginx]
     source: |
       . = parse_json!(.message)
       .app = "nginx"
