@@ -153,10 +153,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1.00"
-          memory: 512M
+          cpus: "2.00"      # headroom for live count_uniq / stats-by queries (Web Analytics dashboard)
+          memory: 2G        # more RAM = more query cache + concurrent-stats headroom
         reservations:
-          memory: 128M
+          memory: 512M
     security_opt:
       - no-new-privileges:true
     # NOTE: distroless image (no shell) -> no CMD-SHELL healthcheck.

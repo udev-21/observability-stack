@@ -10,9 +10,9 @@
   "editable": true,
   "graphTooltip": 0,
   "timezone": "",
-  "refresh": "1m",
+  "refresh": "",
   "time": {
-    "from": "now-24h",
+    "from": "now-6h",
     "to": "now"
   },
   "timepicker": {},
@@ -83,19 +83,24 @@
   },
   "panels": [
     {
-      "id": 1,
+      "id": 7,
       "type": "row",
       "title": "Audience",
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "victorialogs"
+      },
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 0
-      }
+      },
+      "panels": []
     },
     {
-      "id": 2,
+      "id": 1,
       "type": "stat",
       "title": "Unique visitors",
       "datasource": {
@@ -153,7 +158,7 @@
       }
     },
     {
-      "id": 3,
+      "id": 2,
       "type": "stat",
       "title": "Total requests",
       "datasource": {
@@ -211,7 +216,7 @@
       }
     },
     {
-      "id": 4,
+      "id": 3,
       "type": "stat",
       "title": "Page views (HTML 2xx)",
       "datasource": {
@@ -269,7 +274,7 @@
       }
     },
     {
-      "id": 5,
+      "id": 4,
       "type": "stat",
       "title": "Requests / visitor",
       "datasource": {
@@ -328,7 +333,7 @@
       }
     },
     {
-      "id": 6,
+      "id": 5,
       "type": "stat",
       "title": "Bot share",
       "datasource": {
@@ -387,7 +392,7 @@
       }
     },
     {
-      "id": 7,
+      "id": 6,
       "type": "stat",
       "title": "Egress bandwidth",
       "datasource": {
@@ -445,745 +450,781 @@
       }
     },
     {
-      "id": 8,
+      "id": 11,
       "type": "row",
       "title": "Traffic over time",
-      "collapsed": false,
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "victorialogs"
+      },
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 5
-      }
-    },
-    {
-      "id": 9,
-      "type": "timeseries",
-      "title": "Unique visitors over time",
-      "datasource": {
-        "type": "victoriametrics-logs-datasource",
-        "uid": "victorialogs"
       },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 6
-      },
-      "targets": [
+      "panels": [
         {
-          "refId": "A",
+          "id": 8,
+          "type": "timeseries",
+          "title": "Unique visitors over time",
           "datasource": {
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "${traffic:raw} http_host:~\"$host\" | stats count_uniq(remote_addr) visitors",
-          "queryType": "statsRange",
-          "legendFormat": "visitors"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "showPoints": "never",
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
-    },
-    {
-      "id": 10,
-      "type": "timeseries",
-      "title": "Requests vs unique visitors",
-      "datasource": {
-        "type": "victoriametrics-logs-datasource",
-        "uid": "victorialogs"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 6
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "victoriametrics-logs-datasource",
-            "uid": "victorialogs"
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 6
           },
-          "expr": "${traffic:raw} http_host:~\"$host\" | stats count() requests",
-          "queryType": "statsRange",
-          "legendFormat": "requests"
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "victoriametrics-logs-datasource",
-            "uid": "victorialogs"
-          },
-          "expr": "${traffic:raw} http_host:~\"$host\" | stats count_uniq(remote_addr) visitors",
-          "queryType": "statsRange",
-          "legendFormat": "visitors"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "showPoints": "never",
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
-    },
-    {
-      "id": 11,
-      "type": "timeseries",
-      "title": "Egress bandwidth over time",
-      "datasource": {
-        "type": "victoriametrics-logs-datasource",
-        "uid": "victorialogs"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 6
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "victoriametrics-logs-datasource",
-            "uid": "victorialogs"
-          },
-          "expr": "${traffic:raw} http_host:~\"$host\" | stats sum(bytes_sent) bytes",
-          "queryType": "statsRange",
-          "legendFormat": "bytes"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "decbytes",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "showPoints": "never",
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      }
-    },
-    {
-      "id": 12,
-      "type": "row",
-      "title": "Geography",
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 14
-      }
-    },
-    {
-      "id": 13,
-      "type": "bargauge",
-      "title": "Requests by country",
-      "datasource": {
-        "type": "victoriametrics-logs-datasource",
-        "uid": "victorialogs"
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 10,
-        "x": 0,
-        "y": 15
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "victoriametrics-logs-datasource",
-            "uid": "victorialogs"
-          },
-          "expr": "${traffic:raw} http_host:~\"$host\" | stats by (geoip_country_code) count() requests | sort by (requests) desc | limit 20",
-          "queryType": "stats",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "continuous-BlPu"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "valueMode": "color",
-        "showUnfilled": true,
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\" | stats count_uniq(remote_addr) visitors",
+              "queryType": "statsRange",
+              "legendFormat": "visitors"
+            }
           ],
-          "values": true
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 12,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          }
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Requests vs unique visitors",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "victorialogs"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 6
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\" | stats count() requests",
+              "queryType": "statsRange",
+              "legendFormat": "requests"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\" | stats count_uniq(remote_addr) visitors",
+              "queryType": "statsRange",
+              "legendFormat": "visitors"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 12,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          }
+        },
+        {
+          "id": 10,
+          "type": "timeseries",
+          "title": "Egress bandwidth over time",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "victorialogs"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 6
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\" | stats sum(bytes_sent) bytes",
+              "queryType": "statsRange",
+              "legendFormat": "bytes"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "decbytes",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 12,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          }
         }
-      }
+      ]
     },
     {
       "id": 14,
-      "type": "table",
-      "title": "Top countries",
+      "type": "row",
+      "title": "Geography",
       "datasource": {
         "type": "victoriametrics-logs-datasource",
         "uid": "victorialogs"
       },
-      "gridPos": {
-        "h": 9,
-        "w": 14,
-        "x": 10,
-        "y": 15
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "victoriametrics-logs-datasource",
-            "uid": "victorialogs"
-          },
-          "expr": "${traffic:raw} http_host:~\"$host\" | stats by (geoip_country_code) count() requests, count_uniq(remote_addr) visitors | sort by (requests) desc | limit 25",
-          "queryType": "stats",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "filterable": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
-        }
-      }
-    },
-    {
-      "id": 15,
-      "type": "row",
-      "title": "Content",
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 24
-      }
-    },
-    {
-      "id": 16,
-      "type": "table",
-      "title": "Top pages",
-      "datasource": {
-        "type": "victoriametrics-logs-datasource",
-        "uid": "victorialogs"
+        "y": 6
       },
-      "gridPos": {
-        "h": 10,
-        "w": 8,
-        "x": 0,
-        "y": 25
-      },
-      "targets": [
+      "panels": [
         {
-          "refId": "A",
+          "id": 12,
+          "type": "bargauge",
+          "title": "Requests by country",
           "datasource": {
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "${traffic:raw} http_host:~\"$host\" | stats by (request_uri) count() requests, count_uniq(remote_addr) visitors | sort by (requests) desc | limit 25",
-          "queryType": "stats",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "filterable": true
+          "gridPos": {
+            "h": 9,
+            "w": 10,
+            "x": 0,
+            "y": 7
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\" | stats by (geoip_country_code) count() requests | sort by (requests) desc | limit 20",
+              "queryType": "stats",
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {
+                "mode": "continuous-BlPu"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "orientation": "horizontal",
+            "displayMode": "gradient",
+            "valueMode": "color",
+            "showUnfilled": true,
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": true
+            }
           }
         },
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
-        }
-      }
-    },
-    {
-      "id": 17,
-      "type": "table",
-      "title": "Top content by bandwidth",
-      "datasource": {
-        "type": "victoriametrics-logs-datasource",
-        "uid": "victorialogs"
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 8,
-        "x": 8,
-        "y": 25
-      },
-      "targets": [
         {
-          "refId": "A",
+          "id": 13,
+          "type": "table",
+          "title": "Top countries",
           "datasource": {
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "${traffic:raw} http_host:~\"$host\" | stats by (request_uri) sum(bytes_sent) bytes, count() requests | sort by (bytes) desc | limit 25",
-          "queryType": "stats",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "filterable": true
+          "gridPos": {
+            "h": 9,
+            "w": 14,
+            "x": 10,
+            "y": 7
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\" | stats by (geoip_country_code) count() requests, count_uniq(remote_addr) visitors | sort by (requests) desc | limit 25",
+              "queryType": "stats",
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "filterable": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
           }
-        },
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
         }
-      }
+      ]
     },
     {
       "id": 18,
-      "type": "table",
-      "title": "Top 404 / broken paths",
+      "type": "row",
+      "title": "Content",
       "datasource": {
         "type": "victoriametrics-logs-datasource",
         "uid": "victorialogs"
       },
-      "gridPos": {
-        "h": 10,
-        "w": 8,
-        "x": 16,
-        "y": 25
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "victoriametrics-logs-datasource",
-            "uid": "victorialogs"
-          },
-          "expr": "${traffic:raw} http_host:~\"$host\" status:=\"404\" | stats by (request_uri) count() requests, count_uniq(remote_addr) visitors | sort by (requests) desc | limit 25",
-          "queryType": "stats",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "filterable": true
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
-        }
-      }
-    },
-    {
-      "id": 19,
-      "type": "row",
-      "title": "Acquisition",
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 35
-      }
-    },
-    {
-      "id": 20,
-      "type": "table",
-      "title": "Top referrers (external)",
-      "datasource": {
-        "type": "victoriametrics-logs-datasource",
-        "uid": "victorialogs"
+        "y": 7
       },
-      "gridPos": {
-        "h": 9,
-        "w": 16,
-        "x": 0,
-        "y": 36
-      },
-      "targets": [
+      "panels": [
         {
-          "refId": "A",
+          "id": 15,
+          "type": "table",
+          "title": "Top pages",
           "datasource": {
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "${traffic:raw} http_host:~\"$host\" http_referer:!=\"-\" NOT http_referer:~\"$host\" | stats by (http_referer) count() requests, count_uniq(remote_addr) visitors | sort by (requests) desc | limit 25",
-          "queryType": "stats",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "filterable": true
+          "gridPos": {
+            "h": 10,
+            "w": 8,
+            "x": 0,
+            "y": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\" | stats by (request_uri) count() requests, count_uniq(remote_addr) visitors | sort by (requests) desc | limit 25",
+              "queryType": "stats",
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "filterable": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
           }
         },
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
+        {
+          "id": 16,
+          "type": "table",
+          "title": "Top content by bandwidth",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "victorialogs"
+          },
+          "gridPos": {
+            "h": 10,
+            "w": 8,
+            "x": 8,
+            "y": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\" | stats by (request_uri) sum(bytes_sent) bytes, count() requests | sort by (bytes) desc | limit 25",
+              "queryType": "stats",
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "filterable": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          }
+        },
+        {
+          "id": 17,
+          "type": "table",
+          "title": "Top 404 / broken paths",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "victorialogs"
+          },
+          "gridPos": {
+            "h": 10,
+            "w": 8,
+            "x": 16,
+            "y": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\" status:=\"404\" | stats by (request_uri) count() requests, count_uniq(remote_addr) visitors | sort by (requests) desc | limit 25",
+              "queryType": "stats",
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "filterable": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          }
         }
-      }
+      ]
     },
     {
       "id": 21,
-      "type": "piechart",
-      "title": "Direct vs referred",
+      "type": "row",
+      "title": "Acquisition",
       "datasource": {
         "type": "victoriametrics-logs-datasource",
         "uid": "victorialogs"
       },
-      "gridPos": {
-        "h": 9,
-        "w": 8,
-        "x": 16,
-        "y": 36
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "victoriametrics-logs-datasource",
-            "uid": "victorialogs"
-          },
-          "expr": "${traffic:raw} http_host:~\"$host\" http_referer:=\"-\" | stats count() direct",
-          "queryType": "stats",
-          "legendFormat": "Direct"
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "victoriametrics-logs-datasource",
-            "uid": "victorialogs"
-          },
-          "expr": "${traffic:raw} http_host:~\"$host\" http_referer:!=\"-\" | stats count() referred",
-          "queryType": "stats",
-          "legendFormat": "Referred"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "pieType": "donut",
-        "legend": {
-          "displayMode": "list",
-          "placement": "right",
-          "showLegend": true,
-          "values": [
-            "percent"
-          ]
-        },
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      }
-    },
-    {
-      "id": 22,
-      "type": "row",
-      "title": "Audience tech",
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 45
-      }
-    },
-    {
-      "id": 23,
-      "type": "table",
-      "title": "Top user agents",
-      "datasource": {
-        "type": "victoriametrics-logs-datasource",
-        "uid": "victorialogs"
+        "y": 8
       },
-      "gridPos": {
-        "h": 9,
-        "w": 10,
-        "x": 0,
-        "y": 46
-      },
-      "targets": [
+      "panels": [
         {
-          "refId": "A",
+          "id": 19,
+          "type": "table",
+          "title": "Top referrers (external)",
           "datasource": {
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "${traffic:raw} http_host:~\"$host\" | stats by (http_user_agent) count() requests, count_uniq(remote_addr) visitors | sort by (requests) desc | limit 25",
-          "queryType": "stats",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "filterable": true
+          "gridPos": {
+            "h": 9,
+            "w": 16,
+            "x": 0,
+            "y": 9
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\" http_referer:!=\"-\" NOT http_referer:~\"$host\" | stats by (http_referer) count() requests, count_uniq(remote_addr) visitors | sort by (requests) desc | limit 25",
+              "queryType": "stats",
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "filterable": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
           }
         },
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
-        }
-      }
-    },
-    {
-      "id": 24,
-      "type": "table",
-      "title": "Top bots",
-      "datasource": {
-        "type": "victoriametrics-logs-datasource",
-        "uid": "victorialogs"
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 8,
-        "x": 10,
-        "y": 46
-      },
-      "targets": [
         {
-          "refId": "A",
+          "id": 20,
+          "type": "piechart",
+          "title": "Direct vs referred",
           "datasource": {
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "http_host:~\"$host\" http_user_agent:~\"(?i)bot|crawl|spider|slurp|mediapartners|bingpreview|facebookexternal|embedly|whatsapp|telegram|slackbot|discordbot|monitor|uptime|pingdom|curl|wget|python-requests|go-http|headless|phantomjs|scrapy|semrush|ahrefs|mj12|dotbot|petalbot|bytespider|gptbot|ccbot|claudebot|amazonbot|yandex|baidu\" | stats by (http_user_agent) count() requests | sort by (requests) desc | limit 25",
-          "queryType": "stats",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "filterable": true
+          "gridPos": {
+            "h": 9,
+            "w": 8,
+            "x": 16,
+            "y": 9
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\" http_referer:=\"-\" | stats count() direct",
+              "queryType": "stats",
+              "legendFormat": "Direct"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\" http_referer:!=\"-\" | stats count() referred",
+              "queryType": "stats",
+              "legendFormat": "Referred"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "pieType": "donut",
+            "legend": {
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true,
+              "values": [
+                "percent"
+              ]
+            },
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            },
+            "tooltip": {
+              "mode": "single"
+            }
           }
-        },
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
         }
-      }
+      ]
     },
     {
       "id": 25,
-      "type": "piechart",
-      "title": "Device class",
+      "type": "row",
+      "title": "Audience tech",
       "datasource": {
         "type": "victoriametrics-logs-datasource",
         "uid": "victorialogs"
       },
-      "gridPos": {
-        "h": 9,
-        "w": 6,
-        "x": 18,
-        "y": 46
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "victoriametrics-logs-datasource",
-            "uid": "victorialogs"
-          },
-          "expr": "${traffic:raw} http_host:~\"$host\" http_user_agent:~\"(?i)Mobi\" | stats count() mobile",
-          "queryType": "stats",
-          "legendFormat": "Mobile"
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "victoriametrics-logs-datasource",
-            "uid": "victorialogs"
-          },
-          "expr": "${traffic:raw} http_host:~\"$host\" NOT http_user_agent:~\"(?i)Mobi\" | stats count() desktop",
-          "queryType": "stats",
-          "legendFormat": "Desktop"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "pieType": "donut",
-        "legend": {
-          "displayMode": "list",
-          "placement": "right",
-          "showLegend": true,
-          "values": [
-            "percent"
-          ]
-        },
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "values": false
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      }
-    },
-    {
-      "id": 26,
-      "type": "row",
-      "title": "Activity",
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 55
-      }
-    },
-    {
-      "id": 27,
-      "type": "logs",
-      "title": "Recent requests",
-      "datasource": {
-        "type": "victoriametrics-logs-datasource",
-        "uid": "victorialogs"
+        "y": 9
       },
-      "gridPos": {
-        "h": 11,
-        "w": 24,
-        "x": 0,
-        "y": 56
-      },
-      "targets": [
+      "panels": [
         {
-          "refId": "A",
+          "id": 22,
+          "type": "table",
+          "title": "Top user agents",
           "datasource": {
             "type": "victoriametrics-logs-datasource",
             "uid": "victorialogs"
           },
-          "expr": "${traffic:raw} http_host:~\"$host\"",
-          "queryType": "instant"
+          "gridPos": {
+            "h": 9,
+            "w": 10,
+            "x": 0,
+            "y": 10
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\" | stats by (http_user_agent) count() requests, count_uniq(remote_addr) visitors | sort by (requests) desc | limit 25",
+              "queryType": "stats",
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "filterable": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          }
+        },
+        {
+          "id": 23,
+          "type": "table",
+          "title": "Top bots",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "victorialogs"
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 8,
+            "x": 10,
+            "y": 10
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "http_host:~\"$host\" http_user_agent:~\"(?i)bot|crawl|spider|slurp|mediapartners|bingpreview|facebookexternal|embedly|whatsapp|telegram|slackbot|discordbot|monitor|uptime|pingdom|curl|wget|python-requests|go-http|headless|phantomjs|scrapy|semrush|ahrefs|mj12|dotbot|petalbot|bytespider|gptbot|ccbot|claudebot|amazonbot|yandex|baidu\" | stats by (http_user_agent) count() requests | sort by (requests) desc | limit 25",
+              "queryType": "stats",
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "filterable": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          }
+        },
+        {
+          "id": 24,
+          "type": "piechart",
+          "title": "Device class",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "victorialogs"
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 6,
+            "x": 18,
+            "y": 10
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\" http_user_agent:~\"(?i)Mobi\" | stats count() mobile",
+              "queryType": "stats",
+              "legendFormat": "Mobile"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\" NOT http_user_agent:~\"(?i)Mobi\" | stats count() desktop",
+              "queryType": "stats",
+              "legendFormat": "Desktop"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "pieType": "donut",
+            "legend": {
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true,
+              "values": [
+                "percent"
+              ]
+            },
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "values": false
+            },
+            "tooltip": {
+              "mode": "single"
+            }
+          }
         }
-      ],
-      "options": {
-        "showTime": true,
-        "showLabels": false,
-        "wrapLogMessage": false,
-        "enableLogDetails": true,
-        "dedupStrategy": "none",
-        "sortOrder": "Descending"
-      }
+      ]
+    },
+    {
+      "id": 27,
+      "type": "row",
+      "title": "Activity",
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "victorialogs"
+      },
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "panels": [
+        {
+          "id": 26,
+          "type": "logs",
+          "title": "Recent requests",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "victorialogs"
+          },
+          "gridPos": {
+            "h": 11,
+            "w": 24,
+            "x": 0,
+            "y": 11
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "victoriametrics-logs-datasource",
+                "uid": "victorialogs"
+              },
+              "expr": "${traffic:raw} http_host:~\"$host\"",
+              "queryType": "instant"
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": false,
+            "wrapLogMessage": false,
+            "enableLogDetails": true,
+            "dedupStrategy": "none",
+            "sortOrder": "Descending"
+          }
+        }
+      ]
     }
   ]
 }
