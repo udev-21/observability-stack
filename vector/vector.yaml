@@ -273,6 +273,13 @@ sinks:
       enabled: false
     # Shared buckets for ALL seconds-based histograms (request/upstream/rtt).
     buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+    # MEMORY buffer (not disk). A disk buffer here wedged silently in steady state
+    # (no restart, no errors), hoarding ~2 days of metric events that then drained as a
+    # rate() spike with 2-day-old timestamps. Derived counters are rebuilt continuously
+    # from the log stream, so durable buffering of metrics buys nothing — drop on overflow
+    # instead. drop_newest also keeps a slow/blocked VM from back-pressuring the SHARED
+    # nginx source and stalling the logs path. The logs sink keeps its disk buffer.
     buffer:
-      type: disk
-      max_size: 268435488
+      type: memory
+      max_events: 10000
+      when_full: drop_newest
